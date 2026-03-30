@@ -171,9 +171,10 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  // Allow login, setup, auth API, docs, and container health probe without session
+  // Allow login, setup, auth API, docs, health, and container health probe without session
   const isPublicHealthProbe = pathname === '/api/status' && request.nextUrl.searchParams.get('action') === 'health'
-  if (pathname === '/login' || pathname === '/setup' || pathname.startsWith('/api/auth/') || pathname === '/api/setup' || pathname === '/api/docs' || pathname === '/docs' || isPublicHealthProbe) {
+  const isHealthEndpoint = pathname === '/api/health'
+  if (pathname === '/login' || pathname === '/setup' || pathname.startsWith('/api/auth/') || pathname === '/api/setup' || pathname === '/api/docs' || pathname === '/docs' || isPublicHealthProbe || isHealthEndpoint) {
     const { response, nonce } = nextResponseWithNonce(request)
     return addSecurityHeaders(response, request, nonce)
   }
