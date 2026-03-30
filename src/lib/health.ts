@@ -23,6 +23,9 @@ export interface HealthMetrics {
     rss_mb: number
     heap_used_mb: number
     heap_total_mb: number
+    rss_bytes: number
+    heap_used_bytes: number
+    heap_total_bytes: number
   }
   process: {
     pid: number
@@ -81,6 +84,9 @@ export async function getHealthMetrics(): Promise<HealthMetrics> {
       rss_mb: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
       heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
       heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
+      rss_bytes: mem.rss,
+      heap_used_bytes: mem.heapUsed,
+      heap_total_bytes: mem.heapTotal,
     },
     process: {
       pid: process.pid,
@@ -113,11 +119,11 @@ export function formatPrometheus(metrics: HealthMetrics): string {
 
   lines.push('# HELP mc_memory_rss_bytes Resident set size in bytes')
   lines.push('# TYPE mc_memory_rss_bytes gauge')
-  lines.push(`mc_memory_rss_bytes ${Math.round(metrics.memory.rss_mb * 1024 * 1024)}`)
+  lines.push(`mc_memory_rss_bytes ${metrics.memory.rss_bytes}`)
 
   lines.push('# HELP mc_memory_heap_used_bytes Heap used in bytes')
   lines.push('# TYPE mc_memory_heap_used_bytes gauge')
-  lines.push(`mc_memory_heap_used_bytes ${Math.round(metrics.memory.heap_used_mb * 1024 * 1024)}`)
+  lines.push(`mc_memory_heap_used_bytes ${metrics.memory.heap_used_bytes}`)
 
   lines.push('')
   return lines.join('\n')
