@@ -11,6 +11,7 @@ function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a)
   const bufB = Buffer.from(b)
   if (bufA.length !== bufB.length) {
+    // Compare against dummy buffer to avoid timing leak on length mismatch
     const dummy = Buffer.alloc(bufA.length)
     crypto.timingSafeEqual(bufA, dummy)
     return false
