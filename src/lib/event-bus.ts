@@ -36,6 +36,10 @@ export type EventType =
   | 'run.updated'
   | 'run.completed'
   | 'run.eval_attached'
+  | 'skill.created'
+  | 'skill.updated'
+  | 'skill.deleted'
+  | 'skill.reported'
 
 class ServerEventBus extends EventEmitter {
   private static instance: ServerEventBus | null = null
