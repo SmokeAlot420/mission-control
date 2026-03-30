@@ -43,6 +43,9 @@ const EVENT_MAP: Record<string, string> = {
   'task.updated': 'activity.task_updated',
   'task.deleted': 'activity.task_deleted',
   'task.status_changed': 'activity.task_status_changed',
+  'convoy.created': 'convoy.created',
+  'convoy.completed': 'convoy.completed',
+  'convoy.failed': 'convoy.failed',
 }
 
 /**

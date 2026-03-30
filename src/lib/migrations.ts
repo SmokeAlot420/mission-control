@@ -1462,6 +1462,164 @@ const migrations: Migration[] = [
           ON work_checkpoints (workspace_id, task_id, created_at DESC)
       `)
     }
+  },
+  {
+    id: '050_convoy_mode',
+    up(db: Database.Database) {
+      // Convoy lifecycle
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mc_convoys (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK (status IN ('draft', 'active', 'paused', 'completed', 'failed', 'cancelled')),
+          decomposition_mode TEXT NOT NULL DEFAULT 'manual'
+            CHECK (decomposition_mode IN ('manual', 'ai_assisted')),
+          created_by TEXT NOT NULL,
+          base_branch TEXT NOT NULL DEFAULT 'main',
+          repo_path TEXT,
+          merge_strategy TEXT NOT NULL DEFAULT 'squash'
+            CHECK (merge_strategy IN ('squash', 'merge', 'rebase')),
+          total_subtasks INTEGER DEFAULT 0,
+          completed_subtasks INTEGER DEFAULT 0,
+          failed_subtasks INTEGER DEFAULT 0,
+          started_at INTEGER,
+          completed_at INTEGER,
+          metadata TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_convoys_status ON mc_convoys(workspace_id, status)`)
+
+      // Subtask rows with cached dependency counter
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mc_convoy_subtasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          convoy_id INTEGER NOT NULL REFERENCES mc_convoys(id) ON DELETE CASCADE,
+          workspace_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'ready', 'dispatched', 'running',
+                              'completed', 'failed', 'cancelled', 'stalled')),
+          assigned_agent_id TEXT,
+          assigned_agent_name TEXT,
+          paperclip_issue_id TEXT,
+          remaining_dependencies INTEGER NOT NULL DEFAULT 0,
+          port_allocated INTEGER,
+          worktree_path TEXT,
+          worktree_branch TEXT,
+          merge_commit TEXT,
+          error_message TEXT,
+          stall_detected_at INTEGER,
+          dispatched_at INTEGER,
+          started_at INTEGER,
+          completed_at INTEGER,
+          seq INTEGER NOT NULL DEFAULT 0,
+          metadata TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_subtasks_convoy ON mc_convoy_subtasks(convoy_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_subtasks_status ON mc_convoy_subtasks(convoy_id, status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_subtasks_paperclip ON mc_convoy_subtasks(paperclip_issue_id)`)
+
+      // Normalized DAG edges (not JSON arrays)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mc_convoy_dependency_edges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          convoy_id INTEGER NOT NULL REFERENCES mc_convoys(id) ON DELETE CASCADE,
+          from_subtask_id INTEGER NOT NULL REFERENCES mc_convoy_subtasks(id) ON DELETE CASCADE,
+          to_subtask_id INTEGER NOT NULL REFERENCES mc_convoy_subtasks(id) ON DELETE CASCADE,
+          UNIQUE (from_subtask_id, to_subtask_id)
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_edges_convoy ON mc_convoy_dependency_edges(workspace_id, convoy_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_edges_to ON mc_convoy_dependency_edges(to_subtask_id)`)
+
+      // Idempotent dispatch/cancel attempts
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mc_convoy_attempts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          convoy_id INTEGER NOT NULL REFERENCES mc_convoys(id) ON DELETE CASCADE,
+          subtask_id INTEGER NOT NULL REFERENCES mc_convoy_subtasks(id) ON DELETE CASCADE,
+          attempt_key TEXT NOT NULL UNIQUE,
+          action TEXT NOT NULL CHECK (action IN ('dispatch', 'cancel', 'nudge')),
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'sent', 'acked', 'failed', 'expired')),
+          paperclip_issue_id TEXT,
+          error_message TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_attempts_key ON mc_convoy_attempts(workspace_id, attempt_key)`)
+
+      // Durable webhook receipts (write BEFORE state mutation)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS mc_paperclip_webhook_receipts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          event_type TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          paperclip_issue_id TEXT,
+          convoy_id INTEGER,
+          subtask_id INTEGER,
+          processed_at INTEGER,
+          idempotency_key TEXT UNIQUE,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mc_receipts_key ON mc_paperclip_webhook_receipts(workspace_id, idempotency_key)`)
+
+      // Agent mailbox: immutable messages
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          convoy_id INTEGER REFERENCES mc_convoys(id) ON DELETE CASCADE,
+          thread_id INTEGER,
+          correlation_id TEXT,
+          causation_id TEXT,
+          reply_to_message_id INTEGER,
+          from_agent TEXT NOT NULL,
+          message_type TEXT NOT NULL DEFAULT 'message'
+            CHECK (message_type IN ('command', 'approval_request', 'clarification',
+                                    'exception', 'handoff', 'interrupt', 'cancel',
+                                    'result', 'status', 'message')),
+          subject TEXT,
+          body TEXT NOT NULL,
+          artifact_refs TEXT,
+          dedupe_key TEXT UNIQUE,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_messages_convoy ON agent_messages(workspace_id, convoy_id, created_at DESC)`)
+
+      // Per-recipient delivery state
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_deliveries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          message_id INTEGER NOT NULL REFERENCES agent_messages(id) ON DELETE CASCADE,
+          recipient_agent TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK (status IN ('pending', 'seen', 'claimed', 'acked', 'nacked', 'expired', 'dead_lettered')),
+          claim_token TEXT,
+          claimed_at INTEGER,
+          acked_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_deliveries_recipient ON agent_deliveries(workspace_id, recipient_agent, status)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_deliveries_message ON agent_deliveries(message_id)`)
+    }
   }
 ]
 

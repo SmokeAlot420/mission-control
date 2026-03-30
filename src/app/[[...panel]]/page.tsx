@@ -29,6 +29,7 @@ import { SuperAdminPanel } from '@/components/panels/super-admin-panel'
 import { OfficePanel } from '@/components/panels/office-panel'
 import { GitHubSyncPanel } from '@/components/panels/github-sync-panel'
 import { SkillsPanel } from '@/components/panels/skills-panel'
+import { ConvoyPanel } from '@/components/convoy/convoy-panel'
 import { LocalAgentsDocPanel } from '@/components/panels/local-agents-doc-panel'
 import { ChannelsPanel } from '@/components/panels/channels-panel'
 import { DebugPanel } from '@/components/panels/debug-panel'
@@ -558,6 +559,8 @@ function ContentRouter({ tab }: { tab: string }) {
       return <OfficePanel />
     case 'monitor':
       return <SystemMonitorPanel />
+    case 'convoy':
+      return <ConvoyPanel />
     case 'skills':
       return <SkillsPanel />
     case 'channels':

@@ -39,6 +39,16 @@ export type EventType =
   | 'agent.health_changed'
   | 'agent.nudge_sent'
   | 'agent.checkpoint_saved'
+  | 'convoy.created'
+  | 'convoy.status_changed'
+  | 'convoy.progress'
+  | 'convoy.completed'
+  | 'convoy.failed'
+  | 'convoy.deleted'
+  | 'convoy.subtask_dispatched'
+  | 'convoy.subtask_completed'
+  | 'convoy.subtask_failed'
+  | 'convoy.mail_received'
 
 class ServerEventBus extends EventEmitter {
   private static instance: ServerEventBus | null = null

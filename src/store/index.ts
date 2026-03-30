@@ -570,6 +570,13 @@ interface MissionControlStore {
   memoryGraphAgents: { name: string; dbSize: number; totalChunks: number; totalFiles: number; files: { path: string; chunks: number; textSize: number }[] }[] | null
   setMemoryGraphAgents: (agents: { name: string; dbSize: number; totalChunks: number; totalFiles: number; files: { path: string; chunks: number; textSize: number }[] }[]) => void
 
+  // Convoy Mode
+  convoys: { id: number; title: string; status: string; total_subtasks: number; completed_subtasks: number; failed_subtasks: number; created_at: number; updated_at: number }[]
+  selectedConvoyId: number | null
+  setConvoys: (convoys: { id: number; title: string; status: string; total_subtasks: number; completed_subtasks: number; failed_subtasks: number; created_at: number; updated_at: number }[]) => void
+  setSelectedConvoyId: (id: number | null) => void
+  updateConvoyInList: (convoyId: number, updates: Record<string, unknown>) => void
+
   // Security Posture
   securityPosture?: { score: number; level: string }
   setSecurityPosture: (posture: { score: number; level: string } | undefined) => void
@@ -901,6 +908,16 @@ export const useMissionControl = create<MissionControlStore>()(
     // Memory Graph
     memoryGraphAgents: null,
     setMemoryGraphAgents: (agents) => set({ memoryGraphAgents: agents }),
+
+    // Convoy Mode
+    convoys: [],
+    selectedConvoyId: null,
+    setConvoys: (convoys) => set({ convoys }),
+    setSelectedConvoyId: (id) => set({ selectedConvoyId: id }),
+    updateConvoyInList: (convoyId, updates) =>
+      set((state) => ({
+        convoys: state.convoys.map(c => c.id === convoyId ? { ...c, ...updates } : c),
+      })),
 
     // Security Posture
     securityPosture: undefined,
