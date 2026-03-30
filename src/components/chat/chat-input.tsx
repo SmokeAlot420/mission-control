@@ -11,9 +11,10 @@ interface ChatInputProps {
   disabled?: boolean
   agents?: Array<{ name: string; role: string }>
   isGenerating?: boolean
+  compact?: boolean
 }
 
-export function ChatInput({ onSend, onAbort, disabled, agents = [], isGenerating }: ChatInputProps) {
+export function ChatInput({ onSend, onAbort, disabled, agents = [], isGenerating, compact }: ChatInputProps) {
   const { chatInput, setChatInput, isSendingMessage } = useMissionControl()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -191,7 +192,7 @@ export function ChatInput({ onSend, onAbort, disabled, agents = [], isGenerating
 
   return (
     <div
-      className={`relative border-t border-border bg-card/80 backdrop-blur-sm p-3 flex-shrink-0 safe-area-bottom ${isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
+      className={`relative border-t border-border bg-card/80 backdrop-blur-sm ${compact ? 'p-2' : 'p-3'} flex-shrink-0 safe-area-bottom ${isDragOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -264,29 +265,33 @@ export function ChatInput({ onSend, onAbort, disabled, agents = [], isGenerating
       )}
 
       <div className="flex items-end gap-2">
-        {/* Attach button */}
-        <Button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || isSendingMessage}
-          variant="ghost"
-          size="icon-sm"
-          className="rounded-lg flex-shrink-0"
-          title="Attach file"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M13.5 7.5l-5.8 5.8a3.2 3.2 0 01-4.5-4.5l5.8-5.8a2.1 2.1 0 013 3l-5.8 5.7a1 1 0 01-1.4-1.4l5.1-5.2" />
-          </svg>
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) addFiles(e.target.files)
-            e.target.value = ''
-          }}
-        />
+        {/* Attach button (hidden in compact/widget mode) */}
+        {!compact && (
+          <>
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || isSendingMessage}
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-lg flex-shrink-0"
+              title="Attach file"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13.5 7.5l-5.8 5.8a3.2 3.2 0 01-4.5-4.5l5.8-5.8a2.1 2.1 0 013 3l-5.8 5.7a1 1 0 01-1.4-1.4l5.1-5.2" />
+              </svg>
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) addFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </>
+        )}
 
         <textarea
           ref={textareaRef}
@@ -294,7 +299,7 @@ export function ChatInput({ onSend, onAbort, disabled, agents = [], isGenerating
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder={disabled ? 'Select a conversation...' : 'Message... (@ to mention, Enter to send)'}
+          placeholder={disabled ? 'Select a conversation...' : compact ? 'Message...' : 'Message... (@ to mention, Enter to send)'}
           disabled={disabled || isSendingMessage}
           rows={1}
           className="flex-1 resize-none bg-surface-1 rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-40 transition-all"

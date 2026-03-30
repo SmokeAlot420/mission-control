@@ -514,6 +514,8 @@ interface MissionControlStore {
   chatInput: string
   isSendingMessage: boolean
   chatPanelOpen: boolean
+  chatWidgetOpen: boolean
+  chatWidgetView: 'home' | 'chat'
   setChatMessages: (messages: ChatMessage[]) => void
   addChatMessage: (message: ChatMessage) => void
   replacePendingMessage: (tempId: number, message: ChatMessage) => void
@@ -524,6 +526,8 @@ interface MissionControlStore {
   setChatInput: (input: string) => void
   setIsSendingMessage: (loading: boolean) => void
   setChatPanelOpen: (open: boolean) => void
+  setChatWidgetOpen: (open: boolean) => void
+  setChatWidgetView: (view: 'home' | 'chat') => void
   markConversationRead: (conversationId: string) => void
 
   // Auth
@@ -1111,6 +1115,8 @@ export const useMissionControl = create<MissionControlStore>()(
     chatInput: '',
     isSendingMessage: false,
     chatPanelOpen: false,
+    chatWidgetOpen: false,
+    chatWidgetView: 'home' as const,
     setChatMessages: (messages) => set({ chatMessages: messages.slice(-500) }),
     addChatMessage: (message) =>
       set((state) => {
@@ -1147,6 +1153,8 @@ export const useMissionControl = create<MissionControlStore>()(
     setChatInput: (input) => set({ chatInput: input }),
     setIsSendingMessage: (loading) => set({ isSendingMessage: loading }),
     setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
+    setChatWidgetOpen: (open) => set({ chatWidgetOpen: open, chatWidgetView: open ? 'home' : 'home' }),
+    setChatWidgetView: (view) => set({ chatWidgetView: view }),
     markConversationRead: (conversationId) =>
       set((state) => ({
         conversations: state.conversations.map((conv) =>
