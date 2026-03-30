@@ -36,6 +36,16 @@ export type EventType =
   | 'run.updated'
   | 'run.completed'
   | 'run.eval_attached'
+  | 'convoy.created'
+  | 'convoy.status_changed'
+  | 'convoy.progress'
+  | 'convoy.completed'
+  | 'convoy.failed'
+  | 'convoy.deleted'
+  | 'convoy.subtask_dispatched'
+  | 'convoy.subtask_completed'
+  | 'convoy.subtask_failed'
+  | 'convoy.mail_received'
 
 class ServerEventBus extends EventEmitter {
   private static instance: ServerEventBus | null = null
