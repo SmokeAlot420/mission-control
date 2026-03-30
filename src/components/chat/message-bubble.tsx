@@ -83,6 +83,7 @@ interface MessageBubbleProps {
   message: ChatMessage
   isHuman: boolean
   isGrouped: boolean
+  compact?: boolean
 }
 
 function ToolCallBubble({ message }: { message: ChatMessage }) {
@@ -159,7 +160,7 @@ function ToolCallBubble({ message }: { message: ChatMessage }) {
   )
 }
 
-export function MessageBubble({ message, isHuman, isGrouped }: MessageBubbleProps) {
+export function MessageBubble({ message, isHuman, isGrouped, compact: _compact }: MessageBubbleProps) {
   const isSystem = message.message_type === 'system'
   const isHandoff = message.message_type === 'handoff'
   const isCommand = message.message_type === 'command'

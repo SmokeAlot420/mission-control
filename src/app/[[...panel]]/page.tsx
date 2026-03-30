@@ -38,6 +38,7 @@ import { ExecApprovalPanel } from '@/components/panels/exec-approval-panel'
 import { SystemMonitorPanel } from '@/components/panels/system-monitor-panel'
 import { ChatPagePanel } from '@/components/panels/chat-page-panel'
 import { ChatPanel } from '@/components/chat/chat-panel'
+import { ChatWidget } from '@/components/chat/chat-widget'
 import { getPluginPanel } from '@/lib/plugins'
 import { shouldRedirectDashboardToHttps } from '@/lib/browser-security'
 import { useTranslations } from 'next-intl'
@@ -433,6 +434,9 @@ export default function Home() {
 
       {/* Chat panel overlay */}
       {!showOnboarding && <ChatPanel />}
+
+      {/* Floating chat widget */}
+      {!showOnboarding && <ChatWidget />}
 
       {/* Global exec approval overlay (shown regardless of active panel) */}
       {!showOnboarding && <ExecApprovalOverlay />}
