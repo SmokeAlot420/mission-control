@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import { useMissionControl } from '@/store'
 import { Button } from '@/components/ui/button'
+import { SkillCard } from '@/components/skills/skill-card'
+import { SkillEditDrawer } from '@/components/skills/skill-edit-drawer'
 
 interface SkillSummary {
   id: string
@@ -48,7 +50,7 @@ interface RegistrySkill {
   tags?: string[]
 }
 
-type PanelTab = 'installed' | 'registry'
+type PanelTab = 'installed' | 'registry' | 'extracted'
 
 const SOURCE_LABELS: Record<string, string> = {
   'user-agents': '~/.agents/skills (global)',
@@ -70,7 +72,7 @@ function getSourceLabel(source: string): string {
 
 export function SkillsPanel() {
   const t = useTranslations('skills')
-  const { dashboardMode, skillsList, skillGroups, skillsTotal, setSkillsData } = useMissionControl()
+  const { dashboardMode, skillsList, skillGroups, skillsTotal, setSkillsData, extractedSkillsList, extractedSkillsTotal, setExtractedSkillsData } = useMissionControl()
   const [loading, setLoading] = useState(skillsList === null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -110,6 +112,14 @@ export function SkillsPanel() {
     message?: string
     securityStatus?: string
   } | null>(null)
+  const [extractedLoading, setExtractedLoading] = useState(false)
+  const [extractedError, setExtractedError] = useState<string | null>(null)
+  const [extractedQuery, setExtractedQuery] = useState('')
+  const [editingSkillId, setEditingSkillId] = useState<number | null>(null)
+  const [reportingSkillId, setReportingSkillId] = useState<number | null>(null)
+  const [reportOutcome, setReportOutcome] = useState<string>('success')
+  const [reportNotes, setReportNotes] = useState('')
+  const [reportSaving, setReportSaving] = useState(false)
 
   useEffect(() => {
     setIsMounted(true)
@@ -151,6 +161,58 @@ export function SkillsPanel() {
     }, 10000)
     return () => window.clearInterval(id)
   }, [loadSkills])
+
+  const loadExtractedSkills = useCallback(async () => {
+    setExtractedLoading(true)
+    setExtractedError(null)
+    try {
+      const res = await fetch('/api/skills/extracted', { cache: 'no-store' })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error || 'Failed to load extracted skills')
+      setExtractedSkillsData(body.skills || [], body.total || 0)
+    } catch (err: any) {
+      setExtractedError(err?.message || 'Failed to load extracted skills')
+    } finally {
+      setExtractedLoading(false)
+    }
+  }, [setExtractedSkillsData])
+
+  useEffect(() => {
+    if (activeTab === 'extracted' && extractedSkillsList === null) {
+      loadExtractedSkills()
+    }
+  }, [activeTab, extractedSkillsList, loadExtractedSkills])
+
+  const filteredExtracted = useMemo(() => {
+    const list = extractedSkillsList || []
+    const q = extractedQuery.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((skill) => {
+      const kw = typeof skill.trigger_keywords === 'string' ? skill.trigger_keywords : ''
+      const haystack = `${skill.title} ${skill.skill_type} ${skill.description || ''} ${kw} ${skill.created_by_agent || ''}`.toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [extractedSkillsList, extractedQuery])
+
+  const submitReport = async () => {
+    if (!reportingSkillId) return
+    setReportSaving(true)
+    try {
+      const res = await fetch(`/api/skills/extracted/${reportingSkillId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome: reportOutcome, notes: reportNotes || undefined }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error || 'Failed to report outcome')
+      setReportingSkillId(null)
+      setReportOutcome('success')
+      setReportNotes('')
+      await loadExtractedSkills()
+    } catch { /* best-effort */ } finally {
+      setReportSaving(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     let list = skillsList || []
@@ -422,6 +484,12 @@ export function SkillsPanel() {
             className={`px-3 py-1.5 text-xs rounded-md transition-colors ${activeTab === 'registry' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'}`}
           >
             {t('tabRegistry')}
+          </button>
+          <button
+            onClick={() => setActiveTab('extracted')}
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${activeTab === 'extracted' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'}`}
+          >
+            Extracted{extractedSkillsTotal > 0 ? ` (${extractedSkillsTotal})` : ''}
           </button>
         </div>
       </div>
@@ -734,6 +802,114 @@ export function SkillsPanel() {
             <div className="rounded-lg border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
               {t('registryPrompt')}
             </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'extracted' && (
+        <>
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.5 10.5L14 14" />
+            </svg>
+            <input
+              value={extractedQuery}
+              onChange={(e) => setExtractedQuery(e.target.value)}
+              placeholder="Search extracted skills..."
+              className="h-9 w-full rounded-md border border-border bg-secondary/50 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {filteredExtracted.length} of {extractedSkillsTotal} extracted skills
+            </div>
+            <Button variant="outline" size="xs" onClick={loadExtractedSkills} disabled={extractedLoading}>
+              {extractedLoading ? 'Loading...' : 'Refresh'}
+            </Button>
+          </div>
+
+          {extractedError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {extractedError}
+            </div>
+          )}
+
+          {extractedLoading && !extractedSkillsList ? (
+            <div className="rounded-lg border border-border bg-card px-4 py-6 text-sm text-muted-foreground">Loading extracted skills...</div>
+          ) : filteredExtracted.length === 0 ? (
+            <div className="rounded-lg border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+              {extractedSkillsTotal === 0
+                ? 'No extracted skills yet. Skills are automatically extracted from completed tasks, or you can create them via the API.'
+                : 'No skills match your search.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredExtracted.map((skill) => (
+                <SkillCard
+                  key={skill.id}
+                  skill={skill}
+                  onSelect={() => setEditingSkillId(skill.id)}
+                  onReport={(id) => setReportingSkillId(id)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Report outcome modal */}
+          {isMounted && reportingSkillId && createPortal(
+            <div className="fixed inset-0 z-[130]">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setReportingSkillId(null)} />
+              <div className="absolute inset-0 flex items-center justify-center p-4">
+                <div className="w-full max-w-sm bg-card border border-border rounded-lg shadow-2xl overflow-hidden">
+                  <div className="px-5 pt-5 pb-3">
+                    <h3 className="text-sm font-semibold text-foreground">Report Skill Outcome</h3>
+                  </div>
+                  <div className="px-5 pb-4 space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Outcome</label>
+                      <select
+                        value={reportOutcome}
+                        onChange={(e) => setReportOutcome(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-md border border-border bg-secondary/50 px-2 text-xs text-foreground"
+                      >
+                        <option value="success">Success (1.0)</option>
+                        <option value="minor_fix">Minor Fix (0.8)</option>
+                        <option value="partial">Partial (0.5)</option>
+                        <option value="weak_partial">Weak Partial (0.25)</option>
+                        <option value="failure">Failure (0.0)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Notes (optional)</label>
+                      <textarea
+                        value={reportNotes}
+                        onChange={(e) => setReportNotes(e.target.value)}
+                        rows={2}
+                        className="mt-1 w-full rounded-md border border-border bg-secondary/50 p-2 text-xs text-foreground focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setReportingSkillId(null)}>Cancel</Button>
+                    <Button variant="default" size="sm" onClick={submitReport} disabled={reportSaving}>
+                      {reportSaving ? 'Submitting...' : 'Submit'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+          {/* Edit drawer */}
+          {editingSkillId && (
+            <SkillEditDrawer
+              skillId={editingSkillId}
+              onClose={() => setEditingSkillId(null)}
+              onSaved={() => { setEditingSkillId(null); loadExtractedSkills() }}
+            />
           )}
         </>
       )}

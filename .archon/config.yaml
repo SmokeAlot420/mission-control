@@ -1,0 +1,8 @@
+# Bridge (The Homie Dashboard) — Archon Configuration
+assistant: claude
+
+worktree:
+  baseBranch: main
+  copyFiles:
+    - .env
+    - .env.local

@@ -1620,6 +1620,73 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_deliveries_recipient ON agent_deliveries(workspace_id, recipient_agent, status)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_deliveries_message ON agent_deliveries(message_id)`)
     }
+  },
+  {
+    id: '051_extracted_skills',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS extracted_skills (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          skill_type TEXT NOT NULL DEFAULT 'pattern'
+            CHECK (skill_type IN ('build', 'deploy', 'test', 'fix', 'config', 'pattern')),
+          trigger_keywords TEXT DEFAULT '[]',
+          prerequisites TEXT DEFAULT '[]',
+          steps TEXT NOT NULL DEFAULT '[]',
+          verification TEXT,
+          conditions TEXT,
+          times_used INTEGER NOT NULL DEFAULT 0,
+          times_succeeded INTEGER NOT NULL DEFAULT 0,
+          times_failed INTEGER NOT NULL DEFAULT 0,
+          prior_alpha REAL NOT NULL DEFAULT 2.0,
+          prior_beta REAL NOT NULL DEFAULT 2.0,
+          posterior_alpha REAL NOT NULL DEFAULT 2.0,
+          posterior_beta REAL NOT NULL DEFAULT 2.0,
+          expected_success REAL NOT NULL DEFAULT 0.5,
+          confidence REAL NOT NULL DEFAULT 0.0,
+          lower90 REAL NOT NULL DEFAULT 0.0,
+          effective_trials REAL NOT NULL DEFAULT 0.0,
+          last_reported_at INTEGER,
+          source_task_id INTEGER,
+          created_by_agent TEXT,
+          agent_role TEXT,
+          supersedes_skill_id INTEGER,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK (status IN ('draft', 'active', 'deprecated')),
+          enabled INTEGER NOT NULL DEFAULT 1,
+          last_used_at INTEGER,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_extracted_skills_workspace
+          ON extracted_skills (workspace_id, enabled, status);
+        CREATE INDEX IF NOT EXISTS idx_extracted_skills_confidence
+          ON extracted_skills (workspace_id, confidence DESC);
+        CREATE INDEX IF NOT EXISTS idx_extracted_skills_type
+          ON extracted_skills (workspace_id, skill_type);
+
+        CREATE TABLE IF NOT EXISTS skill_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          skill_id INTEGER NOT NULL REFERENCES extracted_skills(id) ON DELETE CASCADE,
+          task_id INTEGER,
+          outcome TEXT NOT NULL CHECK (outcome IN ('success', 'minor_fix', 'partial', 'weak_partial', 'failure')),
+          outcome_value REAL NOT NULL CHECK (outcome_value >= 0 AND outcome_value <= 1),
+          quality_weight REAL NOT NULL DEFAULT 0.35,
+          report_source TEXT NOT NULL DEFAULT 'origin_task',
+          notes TEXT,
+          reported_by TEXT NOT NULL DEFAULT 'system',
+          reviewed_by_human INTEGER DEFAULT 0,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_skill_reports_workspace_skill
+          ON skill_reports (workspace_id, skill_id, created_at DESC);
+      `)
+    }
   }
 ]
 

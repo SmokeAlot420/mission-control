@@ -570,6 +570,11 @@ interface MissionControlStore {
   skillsTotal: number
   setSkillsData: (skills: { id: string; name: string; source: string; path: string; description?: string; registry_slug?: string | null; security_status?: string | null }[], groups: { source: string; path: string; skills: { id: string; name: string; source: string; path: string; description?: string; registry_slug?: string | null; security_status?: string | null }[] }[], total: number) => void
 
+  // Extracted Skills (Bayesian confidence scoring)
+  extractedSkillsList: { id: number; title: string; description: string | null; skill_type: string; confidence: number; expected_success: number; times_used: number; times_succeeded: number; times_failed: number; status: string; enabled: number; created_by_agent: string | null; agent_role: string | null; trigger_keywords: string; steps: string; created_at: number; updated_at: number }[] | null
+  extractedSkillsTotal: number
+  setExtractedSkillsData: (skills: { id: number; title: string; description: string | null; skill_type: string; confidence: number; expected_success: number; times_used: number; times_succeeded: number; times_failed: number; status: string; enabled: number; created_by_agent: string | null; agent_role: string | null; trigger_keywords: string; steps: string; created_at: number; updated_at: number }[], total: number) => void
+
   // Memory Graph (persisted across tab switches)
   memoryGraphAgents: { name: string; dbSize: number; totalChunks: number; totalFiles: number; files: { path: string; chunks: number; textSize: number }[] }[] | null
   setMemoryGraphAgents: (agents: { name: string; dbSize: number; totalChunks: number; totalFiles: number; files: { path: string; chunks: number; textSize: number }[] }[]) => void
@@ -908,6 +913,11 @@ export const useMissionControl = create<MissionControlStore>()(
     skillGroups: null,
     skillsTotal: 0,
     setSkillsData: (skills, groups, total) => set({ skillsList: skills, skillGroups: groups, skillsTotal: total }),
+
+    // Extracted Skills
+    extractedSkillsList: null,
+    extractedSkillsTotal: 0,
+    setExtractedSkillsData: (skills, total) => set({ extractedSkillsList: skills, extractedSkillsTotal: total }),
 
     // Memory Graph
     memoryGraphAgents: null,

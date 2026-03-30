@@ -1,0 +1,162 @@
+name: archon-bridge-phase
+description: |
+  Execute one phase of Bridge Feature Transplants PRP with hook-enforced constraints.
+  Pass the phase name as the message, e.g. "Phase 1: Infrastructure Hardening".
+  Hooks enforce PRP anti-patterns on every Write/Edit. Reviews run in parallel.
+provider: claude
+
+nodes:
+  # ── Layer 0: Load PRP + prime into shared artifacts (deterministic) ──
+  - id: load-context
+    bash: |
+      PRP="/c/Users/Degen/second-brain/PRPs/active/PRP-bridge-feature-transplants.md"
+      PRIME="/c/Users/Degen/second-brain/.claude/primes/bridge-feature-transplants.md"
+      RESEARCH="/c/Users/Degen/second-brain/PRPs/active/RESEARCH-bridge-feature-transplants.md"
+
+      cp "$PRP" "$ARTIFACTS_DIR/prp.md" 2>/dev/null && echo "PRP copied" || echo "WARN: PRP not found at $PRP"
+      cp "$PRIME" "$ARTIFACTS_DIR/prime.md" 2>/dev/null && echo "Prime copied" || echo "WARN: No prime report"
+      cp "$RESEARCH" "$ARTIFACTS_DIR/research.md" 2>/dev/null && echo "Research copied" || echo "WARN: No research doc"
+
+      echo "$ARGUMENTS" > "$ARTIFACTS_DIR/phase-input.txt"
+      echo "=== Context loaded for phase: $ARGUMENTS ==="
+    timeout: 15000
+
+  # ── Layer 1: Implement the phase (command node WITH hooks) ──
+  - id: implement
+    depends_on: [load-context]
+    command: bridge-implement-phase
+    idle_timeout: 600000
+    hooks:
+      PreToolUse:
+        # Gate every file write against PRP constraints
+        - matcher: "Write|Edit"
+          response:
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              additionalContext: |
+                ╔══ BRIDGE PRP CONSTRAINTS — VERIFY BEFORE WRITING ══╗
+                ║ 1. getSupabaseAdmin() for ALL new routes            ║
+                ║    NOT CompatDatabase, NOT db.prepare()             ║
+                ║ 2. workspace_id from auth/context, NEVER hardcode 1 ║
+                ║ 3. Do NOT recreate chat-input/message-bubble        ║
+                ║    Reuse existing Bridge chat components             ║
+                ║ 4. No second chat persistence/transport stack        ║
+                ║ 5. crshdn = reference ONLY — rebuild for Supabase   ║
+                ║ 6. Convoy deps in normalized edge table, NOT JSON    ║
+                ║ 7. Skills confidence = Pr(theta>=tau), NOT raw mean  ║
+                ║ 8. No hardcoded agent names — use env vars           ║
+                ║ 9. All URLs from env vars                            ║
+                ║ 10. Immutable webhook receipt BEFORE state mutation   ║
+                ╚══════════════════════════════════════════════════════╝
+        # Block dangerous bash patterns
+        - matcher: "Bash"
+          response:
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              additionalContext: |
+                SAFETY: Do NOT run killall, npm install (use pnpm), push without PR,
+                or drop/truncate tables. Do NOT kill all Node processes.
+      PostToolUse:
+        # Nudge typecheck after every file write
+        - matcher: "Write|Edit"
+          response:
+            systemMessage: "File written. Run typecheck now: pnpm run typecheck. Fix errors before the next file."
+        # Check bash output for errors
+        - matcher: "Bash"
+          response:
+            systemMessage: "Check output for errors. If typecheck/build failed, fix before continuing."
+
+  # ── Layer 2: Validation gate (deterministic) ──
+  - id: validate
+    depends_on: [implement]
+    bash: |
+      echo "=== TypeCheck ==="
+      pnpm run typecheck 2>&1 | tail -50
+      TC=${PIPESTATUS[0]}
+      echo ""
+      echo "=== Build ==="
+      pnpm run build 2>&1 | tail -50
+      BUILD=${PIPESTATUS[0]}
+      echo ""
+      echo "=== Tests ==="
+      pnpm run test 2>&1 | tail -30 || true
+      echo ""
+      if [ $TC -ne 0 ] || [ $BUILD -ne 0 ]; then
+        echo "VALIDATION FAILED (typecheck=$TC, build=$BUILD)"
+        exit 1
+      fi
+      echo "VALIDATION PASSED"
+    timeout: 300000
+    retry:
+      max_attempts: 2
+      delay_ms: 5000
+      on_error: all
+
+  # ── Layer 3: Create PR ──
+  - id: create-pr
+    depends_on: [validate]
+    context: fresh
+    command: bridge-create-pr
+    idle_timeout: 300000
+
+  # ── Layer 4: Parallel reviews (read-only) ──
+  - id: review-architecture
+    depends_on: [create-pr]
+    context: fresh
+    command: bridge-review-architecture
+    denied_tools: [Write, Edit, Bash]
+    idle_timeout: 300000
+
+  - id: review-security
+    depends_on: [create-pr]
+    context: fresh
+    command: review-security
+    denied_tools: [Write, Edit, Bash]
+    idle_timeout: 300000
+
+  - id: review-types
+    depends_on: [create-pr]
+    context: fresh
+    command: review-types
+    denied_tools: [Write, Edit, Bash]
+    idle_timeout: 300000
+
+  # ── Layer 5: Self-fix all review findings ──
+  - id: self-fix
+    depends_on: [review-architecture, review-security, review-types]
+    trigger_rule: all_done
+    context: fresh
+    command: self-fix
+    idle_timeout: 600000
+    hooks:
+      PreToolUse:
+        - matcher: "Write|Edit"
+          response:
+            hookSpecificOutput:
+              hookEventName: PreToolUse
+              additionalContext: |
+                FIXING REVIEW FINDINGS — same PRP constraints apply:
+                - getSupabaseAdmin() not CompatDatabase
+                - workspace_id from auth/context, never hardcoded
+                - Reuse existing chat stack components
+                - Weighted Beta-Bernoulli for skills scoring
+      PostToolUse:
+        - matcher: "Write|Edit"
+          response:
+            systemMessage: "Fix applied. Run typecheck: pnpm run typecheck"
+
+  # ── Layer 6: Final validation ──
+  - id: final-validate
+    depends_on: [self-fix]
+    bash: |
+      echo "=== Final TypeCheck ==="
+      pnpm run typecheck 2>&1 | tail -50
+      echo ""
+      echo "=== Final Build ==="
+      pnpm run build 2>&1 | tail -50
+      echo ""
+      echo "=== Final Tests ==="
+      pnpm run test 2>&1 | tail -30 || true
+      echo ""
+      echo "BRIDGE PHASE WORKFLOW COMPLETE"
+    timeout: 300000

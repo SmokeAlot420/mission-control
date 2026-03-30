@@ -49,6 +49,10 @@ export type EventType =
   | 'convoy.subtask_completed'
   | 'convoy.subtask_failed'
   | 'convoy.mail_received'
+  | 'skill.created'
+  | 'skill.updated'
+  | 'skill.deleted'
+  | 'skill.reported'
 
 class ServerEventBus extends EventEmitter {
   private static instance: ServerEventBus | null = null
