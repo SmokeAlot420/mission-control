@@ -143,21 +143,28 @@ export function claimDeliveries(agentId: string, workspaceId: number, convoyId?:
 
     if (pending.length === 0) return []
 
-    // Claim deliveries
+    // Claim deliveries — check changes to ensure we actually won the claim
     const claimStmt = db.prepare(`
       UPDATE agent_deliveries SET status = 'claimed', claim_token = ?, claimed_at = ?
       WHERE id = ? AND status = 'pending'
     `)
+    const claimedIds: number[] = []
     for (const d of pending) {
-      claimStmt.run(claimToken, now, d.delivery_id)
+      const result = claimStmt.run(claimToken, now, d.delivery_id)
+      if (result.changes > 0) claimedIds.push(d.delivery_id)
     }
 
-    // Fetch full messages with deliveries
-    const messageIds = [...new Set(pending.map(d => d.message_id))]
+    if (claimedIds.length === 0) return []
+
+    // Refilter: only fetch messages for deliveries we actually claimed
+    const claimedDeliveries = db.prepare(
+      `SELECT DISTINCT message_id FROM agent_deliveries WHERE claim_token = ? AND workspace_id = ?`
+    ).all(claimToken, workspaceId) as { message_id: number }[]
+
     const messages: MessageWithDeliveries[] = []
-    for (const msgId of messageIds) {
-      const msg = db.prepare('SELECT * FROM agent_messages WHERE id = ?').get(msgId) as AgentMessage
-      const deliveries = db.prepare('SELECT * FROM agent_deliveries WHERE message_id = ?').all(msgId) as AgentDelivery[]
+    for (const { message_id } of claimedDeliveries) {
+      const msg = db.prepare('SELECT * FROM agent_messages WHERE id = ?').get(message_id) as AgentMessage
+      const deliveries = db.prepare('SELECT * FROM agent_deliveries WHERE message_id = ?').all(message_id) as AgentDelivery[]
       messages.push({ ...msg, deliveries })
     }
 

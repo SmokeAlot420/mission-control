@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useMissionControl } from '@/store'
 import { Button } from '@/components/ui/button'
 
@@ -17,7 +18,16 @@ function timeAgo(timestamp: number): string {
 }
 
 export function ChatWidgetHome({ onSelectConversation, onNewChat }: ChatWidgetHomeProps) {
-  const { conversations, agents } = useMissionControl()
+  const { conversations, agents, setConversations } = useMissionControl()
+
+  // Load conversations independently — don't depend on ChatPanel having rendered
+  useEffect(() => {
+    if (conversations.length > 0) return
+    fetch('/api/chat/conversations')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => { if (Array.isArray(data) && data.length > 0) setConversations(data) })
+      .catch(() => {})
+  }, [])
 
   // Show recent conversations, sorted by updatedAt, max 6
   const recentConversations = [...conversations]

@@ -41,17 +41,9 @@ export async function POST(request: NextRequest) {
       .update(`${event_type}:${subtask_id}:${JSON.stringify(payload || {})}`)
       .digest('hex')
 
-    // Step 1: Write immutable receipt BEFORE any state mutation
-    const existing = db.prepare(
-      'SELECT id FROM mc_paperclip_webhook_receipts WHERE idempotency_key = ?'
-    ).get(idempotencyKey) as { id: number } | undefined
-
-    if (existing) {
-      return NextResponse.json({ status: 'already_processed', receipt_id: existing.id })
-    }
-
+    // Step 1: Atomic idempotent receipt — INSERT OR IGNORE + check if we won the insert
     const receiptResult = db.prepare(`
-      INSERT INTO mc_paperclip_webhook_receipts (workspace_id, event_type, payload, paperclip_issue_id, convoy_id, subtask_id, idempotency_key)
+      INSERT OR IGNORE INTO mc_paperclip_webhook_receipts (workspace_id, event_type, payload, paperclip_issue_id, convoy_id, subtask_id, idempotency_key)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       resolvedWorkspaceId,
@@ -62,6 +54,14 @@ export async function POST(request: NextRequest) {
       subtask_id,
       idempotencyKey,
     )
+
+    if (receiptResult.changes === 0) {
+      // Another request already inserted this receipt — idempotent return
+      const existing = db.prepare(
+        'SELECT id FROM mc_paperclip_webhook_receipts WHERE idempotency_key = ?'
+      ).get(idempotencyKey) as { id: number }
+      return NextResponse.json({ status: 'already_processed', receipt_id: existing.id })
+    }
     const receiptId = Number(receiptResult.lastInsertRowid)
 
     // Step 2: Process the event (state mutation)
